@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Canvas LMS Bouwer</title>
+<style>
+:root{--bg:#f8fafc;--card:#fff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--accent:#b45309;--dark:#0f172a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+header{background:var(--dark);color:#fff;padding:28px 16px 32px}
+.wrap{max-width:880px;margin:0 auto}
+.eyebrow{color:#fbbf24;font-size:12px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;margin:0}
+h1{font-size:28px;margin:6px 0 4px;font-weight:800}
+header p.sub{color:#cbd5e1;margin:0;font-size:15px}
+main{padding:24px 16px 48px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;display:flex;flex-direction:column;gap:6px}
+.card h2{font-size:17px;margin:0}
+.card .opl{color:var(--muted);font-size:14px;margin:0}
+.card .sj{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:2px 0 8px}
+.links{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+.links a{font-size:13px;font-weight:700;text-decoration:none;border-radius:8px;padding:8px 12px;border:1px solid var(--line);color:var(--ink)}
+.links a.primary{background:var(--dark);color:#fff;border-color:var(--dark)}
+.links a:focus-visible{outline:3px solid #fbbf24;outline-offset:2px}
+.note{color:var(--muted);font-size:13px;margin-top:22px}
+.empty{color:var(--muted)}
+section+section{margin-top:28px}
+section h2.groep{font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.card.basis{background:transparent;border-style:dashed}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<p class="eyebrow">Canvas LMS Bouwer</p>
+<h1>Omgevingen en opleidingen</h1>
+<p class="sub">Kies een opleiding. Het portaal is voor studenten, de CLB is voor het ontwikkelteam.</p>
+</div></header>
+<main><div class="wrap">
+<div id="lijst" aria-live="polite"><p class="empty">Laden...</p></div>
+<p class="note">Studenten gebruiken het portaal via Canvas. Inloggen op de CLB gaat met je GitHub-account en een persoonlijke sleutel.</p>
+</div></main>
+<script>
+(function () {
+  var el = document.getElementById('lijst');
+  function esc(s) { return String(s || '').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  fetch('opleidingen.json?t=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+    .then(function (list) {
+      if (!Array.isArray(list) || !list.length) { el.innerHTML = '<p class="empty">Nog geen opleidingen.</p>'; return; }
+      // Per domein (naam): opleidingen eronder, de map van het domein zelf is de basis voor nieuwe opleidingen.
+      var per = {}, volgorde = [];
+      list.forEach(function (o) { if (!o || !o.map) return; var k = o.naam || o.map; if (!per[k]) { per[k] = []; volgorde.push(k); } per[k].push(o); });
+      var nl = function (a, b) { return String(a).localeCompare(String(b), 'nl', { sensitivity: 'base' }); };
+      var domeinen = [], los = [];
+      volgorde.sort(nl).forEach(function (k) {
+        var opl = per[k].filter(function (o) { return (o.opleiding || '').trim(); });
+        var basis = per[k].filter(function (o) { return !(o.opleiding || '').trim(); });
+        if (opl.length && (basis.length || opl.length > 1)) domeinen.push({ naam: k, opl: opl.sort(function (a, b) { return nl(a.opleiding, b.opleiding); }), basis: basis });
+        else los = los.concat(per[k]);
+      });
+      function kaart(o, soort) {
+        var map = encodeURIComponent(o.map).replace(/%2F/g, '/');
+        var titel = soort === 'opl' ? o.opleiding : o.naam;
+        var onder = soort === 'basis' ? '<p class="opl">Basis voor nieuwe opleidingen</p>' : (soort === 'los' && o.opleiding ? '<p class="opl">' + esc(o.opleiding) + '</p>' : '');
+        return '<article class="card' + (soort === 'basis' ? ' basis' : '') + '"><h2>' + esc(titel) + '</h2>' + onder +
+          (o.sjabloon ? '<p class="sj">Sjabloon ' + esc(o.sjabloon) + '</p>' : '<p class="sj">&nbsp;</p>') +
+          '<div class="links"><a class="primary" href="' + map + '/beheer/">Open CLB</a><a href="' + map + '/">Portaal</a></div></article>';
+      }
+      var html = domeinen.map(function (d) {
+        return '<section><h2 class="groep">' + esc(d.naam) + '</h2><div class="grid">' +
+          d.opl.map(function (o) { return kaart(o, 'opl'); }).join('') + d.basis.map(function (o) { return kaart(o, 'basis'); }).join('') + '</div></section>';
+      }).join('');
+      if (los.length) html += '<section>' + (domeinen.length ? '<h2 class="groep">Overige omgevingen</h2>' : '') + '<div class="grid">' + los.map(function (o) { return kaart(o, 'los'); }).join('') + '</div></section>';
+      el.innerHTML = html;
+    })
+    .catch(function () { el.innerHTML = '<p class="empty">De lijst met opleidingen kon niet worden geladen.</p>'; });
+})();
+</script>
+</body>
+</html>
